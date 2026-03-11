@@ -50,6 +50,7 @@ if(${RESOURCE_DEV})
 else()
     qt_add_resources(QML_RESOURCES qml/qml.qrc)
     qt_add_resources(SYMBOL_RESOURCES symbols/symbols.qrc)
+    qt_add_resources(S57DATA_RESOURCES data/s57data/s57data.qrc)
     set(SYMBOLS_DIR ":/symbols")
 endif()
 
@@ -93,6 +94,7 @@ add_executable(nautograf WIN32
     src/usersettings.h
     ${QML_RESOURCES}
     ${SYMBOL_RESOURCES}
+    ${S57DATA_RESOURCES}
     ${APP_ICON_RESOURCE_WINDOWS}
 )
 

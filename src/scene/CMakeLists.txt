@@ -25,6 +25,8 @@ add_library(scene
     annotations/annotater.h
     annotations/zoomsweeper.cpp
     annotations/zoomsweeper.h
+    s57colortable.cpp
+    include/scene/s57colortable.h
 
     line/linematerial.cpp
     line/linematerial.h

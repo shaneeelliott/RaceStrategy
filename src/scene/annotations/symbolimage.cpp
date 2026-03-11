@@ -4,7 +4,35 @@
 #include <ext/import-svg.h>
 #include <msdfgen.h>
 
+#include "scene/s57colortable.h"
 #include "symbolimage.h"
+
+// OpenCPN DAY_BRIGHT colors for point symbols, loaded lazily on first use.
+struct SymbolColors
+{
+    QColor portBuoy{241, 84, 105};      // CHRED
+    QColor starboardBuoy{104, 228, 86}; // CHGRN
+    QColor symbolBlack{7, 7, 7};        // CHBLK
+
+    SymbolColors()
+    {
+        const S57ColorTable t(QStringLiteral(":/s57data/chartsymbols.xml"));
+        auto load = [&](QColor &target, const char *name) {
+            const QColor c = t.color(QLatin1String(name));
+            if (c.isValid())
+                target = c;
+        };
+        load(portBuoy, "CHRED");
+        load(starboardBuoy, "CHGRN");
+        load(symbolBlack, "CHBLK");
+    }
+};
+
+static const SymbolColors &symbolColors()
+{
+    static const SymbolColors c;
+    return c;
+}
 
 const int imageWidth = 300;
 const int imageHeight = 300;
@@ -48,7 +76,7 @@ void SymbolImage::load()
                                                                         rect.size(),
                                                                         center,
                                                                         QRectF(0, 0, rect.width(), rect.height()),
-                                                                        QColor(0, 0, 0) };
+                                                                        symbolColors().symbolBlack };
         }
     }
 
@@ -79,7 +107,7 @@ void SymbolImage::load()
                                                                                 rect.size(),
                                                                                 center,
                                                                                 roi,
-                                                                                QColor(220, 0, 0) };
+                                                                                symbolColors().portBuoy };
         }
     }
 
@@ -93,7 +121,7 @@ void SymbolImage::load()
                                                                                      rect.size(),
                                                                                      center,
                                                                                      roi,
-                                                                                     QColor(0, 200, 0) };
+                                                                                     symbolColors().starboardBuoy };
         }
     }
 
@@ -121,7 +149,7 @@ void SymbolImage::load()
                                                                   rect.size(),
                                                                   QPointF(rect.width() / 2, rect.height() / 2),
                                                                   QRectF(0, 0, rect.width(), rect.height()),
-                                                                  QColor(0, 0, 0) };
+                                                                  symbolColors().symbolBlack };
         }
     }
 }

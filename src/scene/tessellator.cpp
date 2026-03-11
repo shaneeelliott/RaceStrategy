@@ -5,23 +5,70 @@
 #include "annotations/annotater.h"
 #include "annotations/zoomsweeper.h"
 #include "cutlines/cutlines.h"
+#include "scene/s57colortable.h"
 #include "tessellator.h"
 #include "tilefactory/mercator.h"
 #include "tilefactory/triangulator.h"
 
-static const QColor labelColor = Qt::black;
-static const QColor symbolLabelColor = Qt::black;
-static const QColor criticalWaterColor(165, 202, 159);
-static const QColor landAreaColor(255, 240, 190);
-static const QColor builtUpAreaColor(240, 220, 160);
-static const QColor depthContourColor(110, 190, 230);
-static const QColor coastLineColor = landAreaColor.darker(200);
-static const QColor builtUpAreaColorBorder = builtUpAreaColor.darker(150);
-static const QColor pontoonColor = builtUpAreaColor.darker(120);
-static const QColor pontoonBorderColor = pontoonColor.darker(150);
-static const QColor roadColor = landAreaColor.darker(120);
-static const QColor roadColorBorder = roadColor.darker(150);
-static const QColor shorelineConstructionColor = QColor(80, 80, 80);
+// OpenCPN DAY_BRIGHT S-52 chart colors, loaded lazily from chartsymbols.xml.
+// Using a struct with a Meyers singleton ensures colors are first accessed after
+// the Qt resource system and QApplication are fully initialized.
+struct ChartColors
+{
+    // S-52 area and line colors
+    QColor landArea{201, 185, 122};        // LANDA
+    QColor builtUpArea{177, 145, 57};      // CHBRN
+    QColor coastLine{82, 90, 92};          // CSTLN
+    QColor depthContour{125, 137, 140};    // DEPCN
+    QColor pontoon{139, 102, 31};          // LANDF
+    QColor shorelineConstruction{125, 137, 140}; // CHGRD
+
+    // S-52 depth band colors (standard IHO S-52 thresholds)
+    QColor depthDeep{212, 234, 238};       // DEPDW  > 30 m
+    QColor depthMedium{186, 213, 225};     // DEPMD  10–30 m
+    QColor depthShallow{152, 197, 242};    // DEPMS  3–10 m
+    QColor depthVeryShallow{115, 182, 239}; // DEPVS  0.5–3 m
+    QColor depthIntertidal{131, 178, 149}; // DEPIT  < 0.5 m
+
+    // Derived colors
+    QColor builtUpAreaBorder;
+    QColor pontoonBorder;
+    QColor road;
+    QColor roadBorder;
+
+    ChartColors()
+    {
+        const S57ColorTable t(QStringLiteral(":/s57data/chartsymbols.xml"));
+        auto load = [&](QColor &target, const char *name) {
+            const QColor c = t.color(QLatin1String(name));
+            if (c.isValid())
+                target = c;
+        };
+        load(landArea, "LANDA");
+        load(builtUpArea, "CHBRN");
+        load(coastLine, "CSTLN");
+        load(depthContour, "DEPCN");
+        load(pontoon, "LANDF");
+        load(shorelineConstruction, "CHGRD");
+        load(depthDeep, "DEPDW");
+        load(depthMedium, "DEPMD");
+        load(depthShallow, "DEPMS");
+        load(depthVeryShallow, "DEPVS");
+        load(depthIntertidal, "DEPIT");
+
+        builtUpAreaBorder = builtUpArea.darker(130);
+        pontoonBorder = pontoon.darker(150);
+        road = landArea.darker(115);
+        roadBorder = road.darker(140);
+    }
+};
+
+static const ChartColors &colors()
+{
+    static const ChartColors c;
+    return c;
+}
+
 static const QColor tilePlaceholderOutlineColor = QColor(200, 200, 200);
 static const QColor tilePlaceholderFillColor = QColor(240, 240, 240);
 
@@ -600,45 +647,47 @@ TileData fetchData(TileFactoryWrapper *tileFactory,
             chart->depthAreas(),
             zBase - 0.2,
             [](const ChartData::DepthArea::Reader &depthArea) -> QColor {
-                float depth = depthArea.getDepth();
-                if (depth < 0.5) {
-                    return criticalWaterColor;
+                // Standard S-52 depth bands matching OpenCPN DAY_BRIGHT colors
+                const float depth = depthArea.getDepth();
+                if (depth < 0.5f) {
+                    return colors().depthIntertidal;
+                } else if (depth < 3.0f) {
+                    return colors().depthVeryShallow;
+                } else if (depth < 10.0f) {
+                    return colors().depthShallow;
+                } else if (depth < 30.0f) {
+                    return colors().depthMedium;
+                } else {
+                    return colors().depthDeep;
                 }
-                // The function below maps depth: [0.5, 32] m to a factor [54, 0].
-                // Factor is subtracted from white meaning higher depth gives more white.
-                // Because of the log function the lower range depths are emphasized.
-                float factor = std::clamp<int>(30 - 30 * log10(depth) + 20, 0, 50);
-                return QColor(255 - 2.0 * factor,
-                              255 - 0.6 * factor,
-                              255 - 0.2 * factor);
             });
 
         geometryLayer.polygonVertices += drawPolygons<ChartData::LandArea>(
             chart->landAreas(),
             zBase - 0.5,
-            [](const ChartData::LandArea::Reader &landArea) -> QColor {
-                return landAreaColor;
+            [](const ChartData::LandArea::Reader &) -> QColor {
+                return colors().landArea;
             });
 
         geometryLayer.polygonVertices += drawPolygons<ChartData::BuiltUpArea>(
             chart->builtUpAreas(),
             zBase - 0.7,
-            [](const ChartData::BuiltUpArea::Reader &depthArea) -> QColor {
-                return builtUpAreaColor;
+            [](const ChartData::BuiltUpArea::Reader &) -> QColor {
+                return colors().builtUpArea;
             });
 
         geometryLayer.polygonVertices += drawPolygons<ChartData::Road>(
             chart->roads(),
             zBase - 0.8,
-            [](const ChartData::Road::Reader &road) -> QColor {
-                return roadColor;
+            [](const ChartData::Road::Reader &) -> QColor {
+                return colors().road;
             });
 
         geometryLayer.polygonVertices += drawPolygons<ChartData::Pontoon>(
             chart->pontoons(),
             zBase - 0.8,
-            [](const ChartData::Pontoon::Reader &pontoon) -> QColor {
-                return pontoonColor;
+            [](const ChartData::Pontoon::Reader &) -> QColor {
+                return colors().pontoon;
             });
 
         GeometryLayer::LineGroup thinLines;
@@ -652,39 +701,39 @@ TileData fetchData(TileFactoryWrapper *tileFactory,
 
         thinLines.vertices += strokePolygons<ChartData::Road>(
             chart->roads(),
-            [](const ChartData::Road::Reader &road) -> QColor {
-                return roadColorBorder;
+            [](const ChartData::Road::Reader &) -> QColor {
+                return colors().roadBorder;
             },
             lineClippingRect);
 
         thinLines.vertices += drawLines<ChartData::DepthContour>(
             chart->depthContours(),
-            [](const ChartData::DepthContour::Reader &depthContour) -> QColor {
-                return depthContourColor;
+            [](const ChartData::DepthContour::Reader &) -> QColor {
+                return colors().depthContour;
             });
 
         thickLines.vertices += drawLines<ChartData::Road>(
             chart->roads(),
-            [](const ChartData::Road::Reader &road) -> QColor {
-                return roadColor;
+            [](const ChartData::Road::Reader &) -> QColor {
+                return colors().road;
             });
 
         thickLines.vertices += drawLines<ChartData::Pontoon>(
             chart->pontoons(),
-            [](const ChartData::Pontoon::Reader &pontoon) -> QColor {
-                return pontoonColor;
+            [](const ChartData::Pontoon::Reader &) -> QColor {
+                return colors().pontoon;
             });
 
         mediumLines.vertices += drawLines<ChartData::CoastLine>(
             chart->coastLines(),
-            [](const ChartData::CoastLine::Reader &coastLine) -> QColor {
-                return coastLineColor;
+            [](const ChartData::CoastLine::Reader &) -> QColor {
+                return colors().coastLine;
             });
 
         thickLines.vertices += drawLines<ChartData::ShorelineConstruction>(
             chart->shorelineConstructions(),
-            [](const ChartData::ShorelineConstruction::Reader &item) -> QColor {
-                return shorelineConstructionColor;
+            [](const ChartData::ShorelineConstruction::Reader &) -> QColor {
+                return colors().shorelineConstruction;
             });
 
         geometryLayer.lineGroups.append(thinLines);
@@ -708,7 +757,6 @@ Tessellator::Tessellator(TileFactoryWrapper *tileFactory,
     , m_recipe(recipe)
 {
     connect(&m_watcher, &QFutureWatcher<TileData>::finished, this, &Tessellator::finished);
-    m_data.geometryLayers.append(createLoadingIndicatorLayer());
 }
 
 void Tessellator::setId(const QString &id)

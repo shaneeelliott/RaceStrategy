@@ -6,11 +6,9 @@
 #include <algorithm>
 
 #include "maptile.h"
+#include "scene/s57colortable.h"
 #include "scene/tilefactorywrapper.h"
 #include "tilefactory/mercator.h"
-
-static const QColor builtUpAreaColor(228, 228, 177);
-static const QColor soundingColor(125, 137, 140);
 
 static const char *defaultFont = "fixed";
 static const char *beaconFontFamily = "Times New Roman";
@@ -26,12 +24,45 @@ static const QSize extraPixels = QSize(2, 2);
 static constexpr int tilePadding = 40;
 static constexpr int beaconLabelMargin = 5;
 
-static const QColor safetyWaterColor(204, 255, 255);
-static const QColor shallowWaterColor(153, 204, 255);
-static const QColor criticalWaterColor(160, 192, 132);
+// OpenCPN DAY_BRIGHT S-52 chart colors, loaded lazily on first use.
+struct MapColors
+{
+    QColor builtUpArea{177, 145, 57};       // CHBRN
+    QColor sounding{125, 137, 140};         // SNDG1
+    QColor land{201, 185, 122};             // LANDA
+    QColor landEdge{82, 90, 92};            // CSTLN
+    // Standard S-52 depth band colors (IHO S-52 depth thresholds)
+    QColor depthDeep{212, 234, 238};        // DEPDW  > 30 m
+    QColor depthMedium{186, 213, 225};      // DEPMD  10–30 m
+    QColor depthShallow{152, 197, 242};     // DEPMS  3–10 m
+    QColor depthVeryShallow{115, 182, 239}; // DEPVS  0.5–3 m
+    QColor depthIntertidal{131, 178, 149};  // DEPIT  < 0.5 m
 
-static const QColor landColor(255, 255, 204);
-static const QColor landEdgeColor(181, 181, 181);
+    MapColors()
+    {
+        const S57ColorTable t(QStringLiteral(":/s57data/chartsymbols.xml"));
+        auto load = [&](QColor &target, const char *name) {
+            const QColor c = t.color(QLatin1String(name));
+            if (c.isValid())
+                target = c;
+        };
+        load(builtUpArea, "CHBRN");
+        load(sounding, "SNDG1");
+        load(land, "LANDA");
+        load(landEdge, "CSTLN");
+        load(depthDeep, "DEPDW");
+        load(depthMedium, "DEPMD");
+        load(depthShallow, "DEPMS");
+        load(depthVeryShallow, "DEPVS");
+        load(depthIntertidal, "DEPIT");
+    }
+};
+
+static const MapColors &mapColors()
+{
+    static const MapColors c;
+    return c;
+}
 
 MapTile::MapTile(QQuickItem *parent)
     : QQuickPaintedItem(parent)
@@ -420,8 +451,8 @@ void MapTile::paintLandArea(const ::capnp::List<ChartData::LandArea>::Reader &ar
                             const RenderConfig &renderConfig,
                             QPainter *painter)
 {
-    painter->setBrush(landColor);
-    QPen pen(landEdgeColor);
+    painter->setBrush(mapColors().land);
+    QPen pen(mapColors().landEdge);
 
     if (renderConfig.pixelsPerLongitude < 5000) {
         pen.setWidth(1);
@@ -449,15 +480,18 @@ void MapTile::paintLandArea(const ::capnp::List<ChartData::LandArea>::Reader &ar
 
 QColor MapTile::depthColor(qreal depth)
 {
+    // Standard S-52 depth bands matching OpenCPN DAY_BRIGHT
     if (depth < 0.5) {
-        return criticalWaterColor;
-    } else if (depth < 3) {
-        return shallowWaterColor;
-    } else if (depth < 8) {
-        return safetyWaterColor;
+        return mapColors().depthIntertidal;
+    } else if (depth < 3.0) {
+        return mapColors().depthVeryShallow;
+    } else if (depth < 10.0) {
+        return mapColors().depthShallow;
+    } else if (depth < 30.0) {
+        return mapColors().depthMedium;
+    } else {
+        return mapColors().depthDeep;
     }
-
-    return QColor();
 }
 
 void MapTile::paintDepthAreas(const ::capnp::List<ChartData::DepthArea>::Reader &depthAreas,
@@ -550,7 +584,7 @@ void MapTile::paintBuiltUpArea(const ::capnp::List<ChartData::BuiltUpArea>::Read
                                const RenderConfig &renderConfig,
                                QPainter *painter)
 {
-    QBrush brush(builtUpAreaColor);
+    QBrush brush(mapColors().builtUpArea);
     painter->setBrush(brush);
     painter->setPen(Qt::NoPen);
 
