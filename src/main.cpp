@@ -2,6 +2,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 
 #ifdef USE_XDG_FILE_DIALOG
 #include <xdg-file-dialog/xdg-file-dialog.h>
@@ -50,6 +51,11 @@ void addOexserverdToPath()
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_WIN
+    // Force OpenGL on Windows; the default D3D11 backend has issues with
+    // custom QSG shaders used by the Scene renderer.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName("Nautograf");
     setlocale(LC_NUMERIC, "C");

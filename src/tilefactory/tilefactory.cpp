@@ -240,7 +240,6 @@ std::vector<TileFactory::Tile> TileFactory::tiles(const Pos &center,
             }
         }
     }
-
     m_previousTiles = tiles;
     return tiles;
 }
