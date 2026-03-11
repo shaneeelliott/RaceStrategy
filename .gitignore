@@ -3,3 +3,10 @@ CMakeUserPresets.json
 build*
 *.png
 *.ico
+
+# IDE
+.vs/
+*.code-workspace
+
+# Logs
+*.log
